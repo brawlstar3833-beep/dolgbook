@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, FlatList, TouchableOpacity,
-  StyleSheet, Alert
+  StyleSheet, Alert, Modal, TextInput
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -17,6 +17,9 @@ type Props = {
 export default function PersonScreen({ navigation, route }: Props) {
   const { personName } = route.params;
   const [debts, setDebts] = useState<Debt[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null);
+  const [repayAmount, setRepayAmount] = useState('');
 
   const loadDebts = useCallback(() => {
     getDebtsByPerson(personName).then(setDebts);
@@ -26,23 +29,24 @@ export default function PersonScreen({ navigation, route }: Props) {
 
   const total = debts.reduce((sum, d) => sum + d.amount, 0);
 
-  const handleRepay = (debt: Debt) => {
-    Alert.prompt(
-      '💵 Оплата',
-      `Долг: ${debt.amount} ₽\nВведите сумму оплаты:`,
-      async (input) => {
-        const amount = parseFloat(input?.replace(',', '.') ?? '');
-        if (!amount || amount <= 0) {
-          Alert.alert('Ошибка', 'Введите правильную сумму');
-          return;
-        }
-        await repayDebt(debt.id, amount);
-        loadDebts();
-      },
-      'plain-text',
-      String(debt.amount),
-      'numeric'
-    );
+  const openRepayModal = (debt: Debt) => {
+    setSelectedDebt(debt);
+    setRepayAmount(String(debt.amount));
+    setModalVisible(true);
+  };
+
+  const handleRepayConfirm = async () => {
+    if (!selectedDebt) return;
+    const amount = parseFloat(repayAmount.replace(',', '.'));
+    if (!amount || amount <= 0) {
+      Alert.alert('Ошибка', 'Введите правильную сумму');
+      return;
+    }
+    await repayDebt(selectedDebt.id, amount);
+    setModalVisible(false);
+    setSelectedDebt(null);
+    setRepayAmount('');
+    loadDebts();
   };
 
   const handleDelete = (debt: Debt) => {
@@ -65,6 +69,46 @@ export default function PersonScreen({ navigation, route }: Props) {
 
   return (
     <View style={styles.container}>
+
+      {/* Модальное окно оплаты */}
+      <Modal
+        visible={modalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>💵 Оплата долга</Text>
+            <Text style={styles.modalSubtitle}>
+              Долг: {selectedDebt?.amount} ₽
+            </Text>
+            <Text style={styles.modalLabel}>Введите сумму оплаты:</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={repayAmount}
+              onChangeText={setRepayAmount}
+              keyboardType="numeric"
+              autoFocus
+              placeholder="Сумма"
+              placeholderTextColor="#aaa"
+            />
+            <TouchableOpacity
+              style={styles.modalConfirmBtn}
+              onPress={handleRepayConfirm}
+            >
+              <Text style={styles.modalConfirmText}>✅ ОПЛАТИТЬ</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setModalVisible(false)}
+            >
+              <Text style={styles.modalCancelText}>Отмена</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Итог */}
       <View style={styles.totalCard}>
         <Text style={styles.totalLabel}>Общий долг:</Text>
@@ -94,7 +138,7 @@ export default function PersonScreen({ navigation, route }: Props) {
               <View style={styles.debtActions}>
                 <TouchableOpacity
                   style={styles.repayBtn}
-                  onPress={() => handleRepay(item)}
+                  onPress={() => openRepayModal(item)}
                 >
                   <Text style={styles.repayBtnText}>💵 Оплата</Text>
                 </TouchableOpacity>
@@ -123,6 +167,70 @@ export default function PersonScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5', padding: 12 },
+
+  // Модальное окно
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalBox: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#222',
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 20,
+    color: '#C62828',
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  modalLabel: {
+    fontSize: 18,
+    color: '#555',
+    marginBottom: 8,
+  },
+  modalInput: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 24,
+    borderWidth: 2,
+    borderColor: '#2E7D32',
+    color: '#111',
+    marginBottom: 16,
+  },
+  modalConfirmBtn: {
+    backgroundColor: '#2E7D32',
+    borderRadius: 14,
+    padding: 18,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  modalConfirmText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+  },
+  modalCancelBtn: {
+    padding: 12,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: '#888',
+    fontSize: 18,
+  },
+
+  // Основной экран
   totalCard: {
     backgroundColor: '#C62828',
     borderRadius: 16,
